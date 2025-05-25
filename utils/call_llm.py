@@ -2,6 +2,7 @@ from google import genai
 import os
 import logging
 import json
+import boto3
 from datetime import datetime
 
 # Configure logging
@@ -133,6 +134,113 @@ def call_llm(prompt: str, use_cache: bool = True) -> str:
 #         ]
 #     )
 #     return response.content[1].text
+
+# # Use Anthropic Claude via AWS Bedrock
+# def call_llm(prompt: str, use_cache: bool = True) -> str:
+#     import boto3
+    
+#     # Log the prompt
+#     logger.info(f"PROMPT: {prompt}")
+    
+#     # Check cache if enabled
+#     if use_cache:
+#         # Load cache from disk
+#         cache = {}
+#         if os.path.exists(cache_file):
+#             try:
+#                 with open(cache_file, "r", encoding="utf-8") as f:
+#                     cache = json.load(f)
+#             except:
+#                 logger.warning(f"Failed to load cache, starting with empty cache")
+        
+#         # Return from cache if exists
+#         if prompt in cache:
+#             logger.info(f"RESPONSE: {cache[prompt]}")
+#             return cache[prompt]
+    
+#     # Configure AWS Bedrock client
+#     # You can set AWS credentials via environment variables:
+#     # AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN (optional)
+#     # Or use AWS profiles/IAM roles
+    
+#     # Support for AWS profiles
+#     aws_profile = os.getenv('AWS_PROFILE')
+#     aws_region = os.getenv('AWS_REGION', 'us-west-2')
+    
+#     if aws_profile:
+#         # Use specific profile
+#         session = boto3.Session(profile_name=aws_profile)
+#         bedrock_runtime = session.client(
+#             service_name='bedrock-runtime',
+#             region_name=aws_region
+#         )
+#     else:
+#         # Use default credentials (env vars, default profile, IAM role, etc.)
+#         bedrock_runtime = boto3.client(
+#             service_name='bedrock-runtime',
+#             region_name=aws_region
+#         )
+    
+#     # Model ID or Inference Profile ARN - you can use different Claude models available in Bedrock
+#     # Direct model IDs: anthropic.claude-3-sonnet-20240229-v1:0, anthropic.claude-3-haiku-20240307-v1:0
+#     # Inference profiles for newer models: us.anthropic.claude-3-5-sonnet-20241022-v2:0
+#     model_id = os.getenv('BEDROCK_MODEL_ID', 'us.anthropic.claude-3-5-sonnet-20241022-v2:0')
+    
+#     # Prepare the request body for Anthropic models in Bedrock
+#     request_body = {
+#         "anthropic_version": "bedrock-2023-05-31",
+#         "max_tokens": int(os.getenv('BEDROCK_MAX_TOKENS', '200000')),
+#         "messages": [
+#             {
+#                 "role": "user",
+#                 "content": prompt
+#             }
+#         ],
+#         "temperature": float(os.getenv('BEDROCK_TEMPERATURE', '0.7')),
+#         "top_p": float(os.getenv('BEDROCK_TOP_P', '0.9'))
+#     }
+    
+#     try:
+#         # Invoke the model
+#         response = bedrock_runtime.invoke_model(
+#             modelId=model_id,
+#             contentType='application/json',
+#             accept='application/json',
+#             body=json.dumps(request_body)
+#         )
+        
+#         # Parse the response
+#         response_body = json.loads(response['body'].read())
+#         response_text = response_body['content'][0]['text']
+        
+#         # Log the response
+#         logger.info(f"RESPONSE: {response_text}")
+        
+#         # Update cache if enabled
+#         if use_cache:
+#             # Load cache again to avoid overwrites
+#             cache = {}
+#             if os.path.exists(cache_file):
+#                 try:
+#                     with open(cache_file, "r", encoding="utf-8") as f:
+#                         cache = json.load(f)
+#                 except:
+#                     pass
+            
+#             # Add to cache and save
+#             cache[prompt] = response_text
+#             try:
+#                 with open(cache_file, "w", encoding="utf-8") as f:
+#                     json.dump(cache, f)
+#             except Exception as e:
+#                 logger.error(f"Failed to save cache: {e}")
+        
+#         return response_text
+        
+#     except Exception as e:
+#         error_msg = f"Bedrock API call failed: {str(e)}"
+#         logger.error(error_msg)
+#         raise Exception(error_msg)
 
 # # Use OpenAI o1
 # def call_llm(prompt, use_cache: bool = True):
