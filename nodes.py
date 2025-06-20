@@ -150,13 +150,39 @@ Format the output as a YAML list of dictionaries:
 
         # --- Validation ---
         yaml_str = response.strip().split("```yaml")[1].split("```")[0].strip()
-        abstractions = yaml.safe_load(yaml_str)
-
-        if not isinstance(abstractions, list):
-            raise ValueError("LLM Output is not a list")
+        
+        # Robust YAML parsing to handle Granite's nested format
+        try:
+            ordered_indices_raw = yaml.safe_load(yaml_str)
+        except yaml.parser.ParserError:
+            # If YAML parsing fails, try to extract indices from malformed output
+            lines = yaml_str.strip().split('\n')
+            ordered_indices_raw = []
+            for line in lines:
+                if line.strip().startswith('- '):
+                    # Extract just the number after the dash
+                    try:
+                        idx_part = line.strip()[2:].split('#')[0].split(' ')[0].strip()
+                        if idx_part.isdigit():
+                            ordered_indices_raw.append(int(idx_part))
+                    except:
+                        continue
+        
+        # Flatten nested lists if Granite produced them
+        def flatten_list(lst):
+            result = []
+            for item in lst:
+                if isinstance(item, list):
+                    result.extend(flatten_list(item))
+                else:
+                    result.append(item)
+            return result
+        
+        if isinstance(ordered_indices_raw, list):
+            ordered_indices_raw = flatten_list(ordered_indices_raw)
 
         validated_abstractions = []
-        for item in abstractions:
+        for item in ordered_indices_raw:
             if not isinstance(item, dict) or not all(k in item for k in ["name", "description", "file_indices"]):
                 raise ValueError(f"Missing keys in abstraction item: {item}")
             if not isinstance(item["name"], str):
@@ -397,10 +423,36 @@ Now, provide the YAML output:
 
         # --- Validation ---
         yaml_str = response.strip().split("```yaml")[1].split("```")[0].strip()
-        ordered_indices_raw = yaml.safe_load(yaml_str)
-
-        if not isinstance(ordered_indices_raw, list):
-            raise ValueError("LLM output is not a list")
+        
+        # Robust YAML parsing to handle Granite's nested format
+        try:
+            ordered_indices_raw = yaml.safe_load(yaml_str)
+        except yaml.parser.ParserError:
+            # If YAML parsing fails, try to extract indices from malformed output
+            lines = yaml_str.strip().split('\n')
+            ordered_indices_raw = []
+            for line in lines:
+                if line.strip().startswith('- '):
+                    # Extract just the number after the dash
+                    try:
+                        idx_part = line.strip()[2:].split('#')[0].split(' ')[0].strip()
+                        if idx_part.isdigit():
+                            ordered_indices_raw.append(int(idx_part))
+                    except:
+                        continue
+        
+        # Flatten nested lists if Granite produced them
+        def flatten_list(lst):
+            result = []
+            for item in lst:
+                if isinstance(item, list):
+                    result.extend(flatten_list(item))
+                else:
+                    result.append(item)
+            return result
+        
+        if isinstance(ordered_indices_raw, list):
+            ordered_indices_raw = flatten_list(ordered_indices_raw)
 
         ordered_indices = []
         seen_indices = set()
