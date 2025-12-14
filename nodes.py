@@ -517,7 +517,13 @@ Output the ordered list of abstraction indices, including the name in a comment 
 
 Now, provide the YAML output:
 """
-        response = call_llm(prompt, use_cache=(use_cache and self.cur_retry == 0)) # Use cache only if enabled and not retrying
+        from utils.call_llm import call_llm_with_context
+        response = call_llm_with_context(
+            prompt=prompt,
+            context="", # Context is already inside the prompt
+            use_cache=(use_cache and self.cur_retry == 0),
+            include_remote_rag=True
+        )
 
         # --- Validation ---
         yaml_str = response.strip().split("```yaml")[1].split("```")[0].strip()

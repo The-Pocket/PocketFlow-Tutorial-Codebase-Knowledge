@@ -160,44 +160,91 @@ def call_llm(prompt: str, use_cache: bool = True) -> str:
 
 
 
-def get_open_webui_context(prompt: str, collection_name: str = "#csharpdocs") -> str:
+
+
+def get_open_webui_context(
+    prompt: str, 
+    collection_name: str = "csharpdocs",
+    jwt_token: str = None
+) -> str:
     """
-    Retrieve knowledge from Open WebUI RAG server.
+    Query Open WebUI knowledge collection with RAG enabled.
+    The RAG retrieval happens server-side in Open WebUI using the 'files' parameter or proper knowledge retrieval.
     """
-    api_key = os.getenv("OPEN_WEBUI_API_KEY")
-    base_url = os.getenv("OPEN_WEBUI_ENDPOINT", "http://localhost:3000")
+    # 1. Setup Auth and Config
+    if not jwt_token:
+        # Try JWT token first, fallback to API Key (which is often a Bearer token anyway)
+        jwt_token = os.getenv("OPEN_WEBUI_JWT_TOKEN") or os.getenv("OPEN_WEBUI_API_KEY")
     
-    if not api_key:
-        logger.warning("OPEN_WEBUI_API_KEY not set. Skipping remote RAG.")
+    if not jwt_token:
+        logger.warning("OPEN_WEBUI_JWT_TOKEN/API_KEY not set. Skipping RAG.")
+        return ""
+    
+    # Allow overriding collection name from env
+    collection_name = os.getenv("OPEN_WEBUI_COLLECTION", collection_name)
+
+    base_url = os.getenv("OPEN_WEBUI_ENDPOINT", "http://localhost:3000")
+    headers = {
+        'Authorization': f'Bearer {jwt_token}',
+        'Content-Type': 'application/json'
+    }
+
+    # 2. Get Collection ID from Name
+    collection_id = None
+    try:
+        collections_url = f"{base_url}/api/v1/knowledge/"
+        # Use short timeout for list
+        resp = requests.get(collections_url, headers=headers, timeout=10)
+        resp.raise_for_status()
+        collections = resp.json()
+        
+        for col in collections:
+            if col.get('name', '').lower() == collection_name.lower():
+                collection_id = col['id']
+                break
+        
+        if not collection_id:
+            logger.warning(f"Collection '{collection_name}' not found in Open WebUI. Returning empty RAG context.")
+            return ""
+            
+        logger.info(f"Found Knowledge Collection: {collection_name} -> {collection_id}")
+        
+    except Exception as e:
+        logger.error(f"Failed to lookup Knowledge Collection ID: {e}")
         return ""
 
-    url = f"{base_url}/api/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-    
-    # We use the prompt with the collection hash to trigger RAG
-    # We ask the model to "Provide relevant information about: ..."
-    search_prompt = f"{collection_name} Provide relevant information / documentation context for the following task/query: {prompt}"
+    # 3. Query Chat Completions with RAG context
+    # This triggers the server-side RAG engine because we pass the 'files' parameter
+    chat_url = f"{base_url}/api/chat/completions"
     
     payload = {
-        "model": os.getenv("OLLAMA_MODEL", "qwen3:8b"), # Default to model in env
-        "messages": [{"role": "user", "content": search_prompt}],
+        "model": os.getenv("OLLAMA_MODEL", "qwen3:8b"),
+        "messages": [
+            {"role": "user", "content": prompt}
+        ],
+        "files": [
+            {
+                "type": "collection",
+                "id": collection_id
+            }
+        ],
         "stream": False
     }
     
     try:
-        logger.info(f"Querying Open WebUI RAG: {search_prompt[:50]}...")
-        response = requests.post(url, headers=headers, json=payload, timeout=300) # Longer timeout for RAG
+        logger.info(f"Querying Open WebUI RAG for: '{prompt[:50]}...'")
+        response = requests.post(chat_url, headers=headers, json=payload, timeout=300) # 5 min timeout for RAG
         response.raise_for_status()
         result = response.json()
+        
         content = result["choices"][0]["message"]["content"]
-        logger.info(f"RAG Retrieval successful. Length: {len(content)}")
+        logger.info(f"RAG Retrieval Successful. Response Length: {len(content)}")
         return content
+        
     except Exception as e:
         logger.error(f"Open WebUI RAG Query failed: {e}")
         return ""
+
 
 
 def call_llm_with_context(prompt: str, context: str = "", use_cache: bool = True, include_remote_rag: bool = False) -> str:
@@ -233,6 +280,14 @@ Use the code context above to provide accurate, specific answers."""
         full_prompt = prompt
     
     return call_llm(full_prompt, use_cache)
+
+if __name__ == "__main__":
+    # Test block as requested
+    from dotenv import load_dotenv
+    load_dotenv()
+    print("Testing get_open_webui_context...")
+    res = get_open_webui_context("file-based programs .NET 10")
+    print(f"Retrieved: {res[:200]}")
 
 
 def _call_llm_gemini(prompt: str) -> str:
