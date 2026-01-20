@@ -4,8 +4,10 @@ import logging
 import json
 import requests
 from datetime import datetime
+from dotenv import load_dotenv
 
 # Configure logging
+load_dotenv()  # Load environment variables from .env file
 log_directory = os.getenv("LOG_DIR", "logs")
 os.makedirs(log_directory, exist_ok=True)
 log_file = os.path.join(
@@ -159,7 +161,8 @@ def call_llm(prompt: str, use_cache: bool = True) -> str:
 
 
 def _call_llm_gemini(prompt: str) -> str:
-    if os.getenv("GEMINI_PROJECT_ID"):
+    use_vertexai = os.getenv("GEMINI_USE_VERTEXAI", "").lower() in {"1", "true", "yes"}
+    if use_vertexai and os.getenv("GEMINI_PROJECT_ID"):
         client = genai.Client(
             vertexai=True,
             project=os.getenv("GEMINI_PROJECT_ID"),
@@ -167,6 +170,11 @@ def _call_llm_gemini(prompt: str) -> str:
         )
     elif os.getenv("GEMINI_API_KEY"):
         client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+    elif os.getenv("GEMINI_PROJECT_ID"):
+        raise ValueError(
+            "GEMINI_PROJECT_ID is set but no ADC found. "
+            "Set GEMINI_USE_VERTEXAI=true and configure ADC, or provide GEMINI_API_KEY."
+        )
     else:
         raise ValueError("Either GEMINI_PROJECT_ID or GEMINI_API_KEY must be set in the environment")
     model = os.getenv("GEMINI_MODEL", "gemini-2.5-pro-exp-03-25")
