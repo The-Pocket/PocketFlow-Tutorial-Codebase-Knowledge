@@ -3,6 +3,8 @@ import os
 import logging
 import json
 import requests
+import subprocess
+import shlex
 from datetime import datetime
 from dotenv import load_dotenv
 
@@ -131,6 +133,12 @@ def call_llm(prompt: str, use_cache: bool = True) -> str:
     # Log the prompt
     logger.info(f"PROMPT: {prompt}")
 
+    use_copilot_cli = os.getenv("ENABLE_COPILOT_CLI", "").lower() in {"1", "true", "yes"}
+    if use_copilot_cli:
+        response_text = _call_llm_copilot(prompt)
+        logger.info(f"RESPONSE: {response_text}")
+        return response_text
+
     # Check cache if enabled
     if use_cache:
         # Load cache from disk
@@ -183,6 +191,31 @@ def _call_llm_gemini(prompt: str) -> str:
         contents=[prompt]
     )
     return response.text
+
+
+def _call_llm_copilot(prompt: str) -> str:
+    copilot_model = os.getenv("COPILOT_MODEL")
+    copilot_options = os.getenv("COPILOT_OPTIONS", "--allow-all")
+
+    command = ["copilot", "-p", prompt]
+    if copilot_model:
+        command[1:1] = ["--model", copilot_model]
+    if copilot_options:
+        command.extend(shlex.split(copilot_options))
+
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        raise Exception(
+            f"Copilot CLI failed: {e}. stdout: {e.stdout.strip()} stderr: {e.stderr.strip()}"
+        )
+
+    return result.stdout.strip()
 
 if __name__ == "__main__":
     test_prompt = "Hello, how are you?"
