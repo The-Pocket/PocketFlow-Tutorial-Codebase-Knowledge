@@ -68,7 +68,7 @@ class TestProviderDefaults:
 
     def test_minimax_default_model(self):
         from utils.call_llm import _PROVIDER_DEFAULTS
-        assert _PROVIDER_DEFAULTS["MINIMAX"]["model"] == "MiniMax-M2.5"
+        assert _PROVIDER_DEFAULTS["MINIMAX"]["model"] == "MiniMax-M2.7"
 
     def test_minimax_temperature_range(self):
         from utils.call_llm import _PROVIDER_DEFAULTS
@@ -105,14 +105,14 @@ class TestCallLlmProviderMiniMax:
         payload = call_args[1]["json"]
         headers = call_args[1]["headers"]
         assert "api.minimax.io" in url
-        assert payload["model"] == "MiniMax-M2.5"
+        assert payload["model"] == "MiniMax-M2.7"
         assert headers["Authorization"] == "Bearer test-key-123"
 
     def test_custom_model_overrides_default(self, monkeypatch):
         _clean_env(monkeypatch)
         monkeypatch.setenv("LLM_PROVIDER", "MINIMAX")
         monkeypatch.setenv("MINIMAX_API_KEY", "key")
-        monkeypatch.setenv("MINIMAX_MODEL", "MiniMax-M2.5-highspeed")
+        monkeypatch.setenv("MINIMAX_MODEL", "MiniMax-M2.7-highspeed")
 
         mock_response = mock.MagicMock()
         mock_response.json.return_value = {
@@ -125,7 +125,7 @@ class TestCallLlmProviderMiniMax:
             _call_llm_provider("prompt")
 
         payload = mock_post.call_args[1]["json"]
-        assert payload["model"] == "MiniMax-M2.5-highspeed"
+        assert payload["model"] == "MiniMax-M2.7-highspeed"
 
     def test_custom_base_url_overrides_default(self, monkeypatch):
         _clean_env(monkeypatch)
@@ -262,7 +262,7 @@ class TestMiniMaxLiveIntegration:
     def test_highspeed_model(self, monkeypatch, tmp_path):
         _clean_env(monkeypatch)
         monkeypatch.setenv("MINIMAX_API_KEY", _LIVE_API_KEY)
-        monkeypatch.setenv("MINIMAX_MODEL", "MiniMax-M2.5-highspeed")
+        monkeypatch.setenv("MINIMAX_MODEL", "MiniMax-M2.7-highspeed")
         monkeypatch.setattr("utils.call_llm.cache_file", str(tmp_path / "cache.json"))
 
         from utils.call_llm import call_llm
