@@ -57,9 +57,11 @@ def _call_llm_provider(prompt: str) -> str:
     Environment variables:
     - LLM_PROVIDER: "OLLAMA" or "XAI"
     - <provider>_MODEL: Model name (e.g., OLLAMA_MODEL, XAI_MODEL)
-    - <provider>_BASE_URL: Base URL without endpoint (e.g., OLLAMA_BASE_URL, XAI_BASE_URL)
+    - <provider>_BASE_URL: Base URL of the API. May include or omit a trailing /v1
+      (e.g., OLLAMA_BASE_URL=http://localhost:11434 or http://localhost:11434/v1,
+             XAI_BASE_URL=https://api.x.ai/v1 or https://openrouter.ai/api/v1)
     - <provider>_API_KEY: API key (e.g., OLLAMA_API_KEY, XAI_API_KEY; optional for providers that don't require it)
-    The endpoint /v1/chat/completions will be appended to the base URL.
+    The /chat/completions endpoint is appended; /v1 is added only if not already present in the URL.
     """
     logger.info(f"PROMPT: {prompt}") # log the prompt
 
@@ -84,8 +86,13 @@ def _call_llm_provider(prompt: str) -> str:
     if not base_url:
         raise ValueError(f"{base_url_var} environment variable is required")
 
-    # Append the endpoint to the base URL
-    url = f"{base_url.rstrip('/')}/v1/chat/completions"
+    # Build the chat completions URL. Avoid duplicating /v1 when the caller
+    # already includes it in BASE_URL (e.g. https://openrouter.ai/api/v1).
+    clean_base = base_url.rstrip('/')
+    if clean_base.endswith('/v1'):
+        url = f"{clean_base}/chat/completions"
+    else:
+        url = f"{clean_base}/v1/chat/completions"
 
     # Configure headers and payload based on provider
     headers = {
@@ -100,20 +107,32 @@ def _call_llm_provider(prompt: str) -> str:
         "temperature": 0.7,
     }
 
+    response_json = None
     try:
         response = requests.post(url, headers=headers, json=payload)
-        response_json = response.json() # Log the response
-        logger.info("RESPONSE:\n%s", json.dumps(response_json, indent=2))
-        #logger.info(f"RESPONSE: {response.json()}")
+        # Parse JSON first so we can log it and include error details on failure
+        try:
+            response_json = response.json()
+            logger.info("RESPONSE:\n%s", json.dumps(response_json, indent=2))
+        except (ValueError, requests.exceptions.JSONDecodeError):
+            logger.warning(
+                "Non-JSON response from %s (HTTP %s): %s",
+                provider, response.status_code, response.text[:500]
+            )
         response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"]
+        if response_json is None:
+            raise Exception(
+                f"Empty or non-JSON response from {provider} (HTTP {response.status_code}). "
+                f"Verify that {base_url_var} points to a valid OpenAI-compatible endpoint."
+            )
+        return response_json["choices"][0]["message"]["content"]
     except requests.exceptions.HTTPError as e:
         error_message = f"HTTP error occurred: {e}"
-        try:
-            error_details = response.json().get("error", "No additional details")
+        if response_json is not None:
+            error_details = response_json.get("error", "No additional details")
             error_message += f" (Details: {error_details})"
-        except:
-            pass
+        elif response.text:
+            error_message += f" (Response: {response.text[:200]})"
         raise Exception(error_message)
     except requests.exceptions.ConnectionError:
         raise Exception(f"Failed to connect to {provider} API. Check your network connection.")
@@ -121,8 +140,6 @@ def _call_llm_provider(prompt: str) -> str:
         raise Exception(f"Request to {provider} API timed out.")
     except requests.exceptions.RequestException as e:
         raise Exception(f"An error occurred while making the request to {provider}: {e}")
-    except ValueError:
-        raise Exception(f"Failed to parse response as JSON from {provider}. The server might have returned an invalid response.")
 
 # By default, we Google Gemini 2.5 pro, as it shows great performance for code understanding
 def call_llm(prompt: str, use_cache: bool = True) -> str:
