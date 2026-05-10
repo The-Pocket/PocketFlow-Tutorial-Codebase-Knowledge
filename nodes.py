@@ -878,3 +878,30 @@ class CombineTutorial(Node):
     def post(self, shared, prep_res, exec_res):
         shared["final_output_dir"] = exec_res  # Store the output path
         print(f"\nTutorial generation complete! Files are in: {exec_res}")
+
+        # Opt-in: emit a generic@1 knowledge-graph projection and (if a token is
+        # set) publish to the understand-quickly registry. Failures here never
+        # affect tutorial generation — the markdown output is already written.
+        if shared.get("publish_to_uq"):
+            try:
+                from pathlib import Path
+                from utils.uq_publish import build_generic_graph, publish
+
+                source_dir = Path(shared["local_dir"]).resolve() if shared.get("local_dir") else None
+                graph = build_generic_graph(
+                    project_name=shared["project_name"],
+                    abstractions=shared.get("abstractions", []),
+                    chapter_order=shared.get("chapter_order", []),
+                    relationships=shared.get("relationships", {}),
+                    repo_url=shared.get("repo_url"),
+                    source_dir=source_dir,
+                )
+                graph_path = Path(exec_res) / "tutorial.json"
+                publish(
+                    graph,
+                    graph_path,
+                    repo_url=shared.get("repo_url"),
+                    source_dir=source_dir,
+                )
+            except Exception as exc:
+                print(f"[uq-publish] warning: {exc}")

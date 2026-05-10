@@ -56,6 +56,15 @@ def main():
     parser.add_argument("--no-cache", action="store_true", help="Disable LLM response caching (default: caching enabled)")
     # Add max_abstraction_num parameter to control the number of abstractions
     parser.add_argument("--max-abstractions", type=int, default=10, help="Maximum number of abstractions to identify (default: 10)")
+    # Opt-in publish to the understand-quickly registry of code-knowledge graphs.
+    # https://github.com/looptech-ai/understand-quickly
+    parser.add_argument(
+        "--publish",
+        action="store_true",
+        help="Emit a generic@1 knowledge-graph projection of the tutorial and (if "
+             "UNDERSTAND_QUICKLY_TOKEN is set) dispatch it to the understand-quickly "
+             "registry. Opt-in; default behavior is unchanged.",
+    )
 
     args = parser.parse_args()
 
@@ -87,6 +96,9 @@ def main():
         
         # Add max_abstraction_num parameter
         "max_abstraction_num": args.max_abstractions,
+
+        # Opt-in publish to understand-quickly (looptech-ai/understand-quickly).
+        "publish_to_uq": args.publish,
 
         # Outputs will be populated by the nodes
         "files": [],
