@@ -895,6 +895,7 @@ class CombineTutorial(Node):
                     relationships=shared.get("relationships", {}),
                     repo_url=shared.get("repo_url"),
                     source_dir=source_dir,
+                    files_data=shared.get("files"),
                 )
                 graph_path = Path(exec_res) / "tutorial.json"
                 publish(

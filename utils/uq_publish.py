@@ -1,8 +1,8 @@
 """Opt-in understand-quickly registry publish for PocketFlow-Tutorial-Codebase-Knowledge.
 
 Emits a small `generic@1` knowledge-graph projection of the generated tutorial
-(nodes = chapters, edges = chapter relationships) and, if a token is set,
-fires a `repository_dispatch` at the registry.
+(nodes = abstractions/chapters, edges = relationships + chapter ordering) and,
+if a token is set, fires a `repository_dispatch` at the registry.
 
 Stdlib-only — no new dependencies.
 
@@ -69,22 +69,43 @@ def build_generic_graph(
     relationships: dict,
     repo_url: str | None,
     source_dir: Path | None,
+    files_data: list[tuple[str, str]] | None = None,
 ) -> dict:
     """Project the tutorial onto a `generic@1` node/edge graph.
 
     Each abstraction becomes a node (kind=abstraction). The edges capture the
     `relationships.details` produced by AnalyzeRelationships and chapter ordering.
+
+    `abstr["files"]` is a list of integer indices into `files_data` (the
+    `(path, content)` tuples produced upstream). When `files_data` is supplied
+    we resolve indices to repo-relative paths in the exported `files` field;
+    otherwise we expose them as `file_indices` so consumers know what to expect.
     """
+    # O(1) lookup for chapter_index to avoid O(n^2) scans on large tutorials.
+    chapter_index_by_abstr = {abstr_idx: pos for pos, abstr_idx in enumerate(chapter_order)}
+
     nodes: list[dict] = []
     for i, abstr in enumerate(abstractions):
-        nodes.append({
+        raw_files = list(abstr.get("files", []))
+        node: dict[str, Any] = {
             "id": f"A{i}",
             "label": abstr.get("name", f"abstraction {i}"),
             "kind": "abstraction",
             "description": abstr.get("description", ""),
-            "files": list(abstr.get("files", [])),
-            "chapter_index": chapter_order.index(i) if i in chapter_order else None,
-        })
+            "chapter_index": chapter_index_by_abstr.get(i),
+        }
+        if files_data is not None:
+            resolved: list[str] = []
+            for idx in raw_files:
+                if isinstance(idx, int) and 0 <= idx < len(files_data):
+                    resolved.append(files_data[idx][0])
+                elif isinstance(idx, str):
+                    resolved.append(idx)
+            node["files"] = resolved
+        else:
+            # Indices verbatim — name the field for what they actually are.
+            node["file_indices"] = raw_files
+        nodes.append(node)
     edges: list[dict] = []
     for rel in (relationships or {}).get("details", []):
         edges.append({
@@ -185,10 +206,29 @@ def publish(
               file=log)
         return {"dispatched": False, "metadata": metadata}
 
+    # Registry fetches via raw.githubusercontent.com, so it needs a repo-relative
+    # POSIX path. If the graph isn't inside the repo (or no repo dir is known),
+    # fall back to the basename rather than dispatching an absolute filesystem path.
+    output_path = Path(output_path).resolve()
+    rel_graph_path: str | None = None
+    if source_dir is not None:
+        try:
+            rel_graph_path = output_path.relative_to(Path(source_dir).resolve()).as_posix()
+        except ValueError:
+            rel_graph_path = None
+    if rel_graph_path is None:
+        print(
+            f"[uq-publish] {output_path} is not inside source_dir; "
+            f"skipping dispatch (registry can only fetch paths inside the repo).",
+            file=log,
+        )
+        return {"dispatched": False, "metadata": metadata,
+                "error": "graph_path outside source_dir"}
+
     try:
         status = dispatch(
             repo_slug, token=token, schema=graph.get("schema", "generic@1"),
-            graph_path=str(output_path), commit=metadata.get("commit"),
+            graph_path=rel_graph_path, commit=metadata.get("commit"),
         )
     except urllib.error.HTTPError as exc:
         if exc.code == 404:

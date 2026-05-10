@@ -157,7 +157,7 @@ To run this project in a Docker container, you'll need to pass your API keys as 
 
 ## 📡 Publish to understand-quickly (opt-in)
 
-Add `--publish` to land the generated tutorial in [`looptech-ai/understand-quickly`](https://github.com/looptech-ai/understand-quickly), a public registry of code-knowledge graphs that ships an MCP server. The flag emits a small `generic@1` JSON projection of the tutorial (chapters as nodes, relationships as edges) at `<output>/<project>/tutorial.json` with `metadata.{tool, tool_version, generated_at, commit}`. If `UNDERSTAND_QUICKLY_TOKEN` is set, it also fires a `repository_dispatch` so the registry resyncs the entry.
+Add `--publish` to land the generated tutorial in [`looptech-ai/understand-quickly`](https://github.com/looptech-ai/understand-quickly), a public registry of code-knowledge graphs that ships an MCP server. The flag emits a small `generic@1` JSON projection of the tutorial (abstractions/chapters as nodes, relationships as edges) at `<output>/<project>/tutorial.json` with `metadata.{tool, tool_version, generated_at}` plus `commit` when a local git repo is available (i.e. for `--dir`; not always populated for remote `--repo` crawls). If `UNDERSTAND_QUICKLY_TOKEN` is set, it also fires a `repository_dispatch` so the registry resyncs the entry.
 
 ```bash
 python main.py --repo https://github.com/example/demo --publish
