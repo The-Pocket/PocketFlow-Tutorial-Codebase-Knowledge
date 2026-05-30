@@ -4,6 +4,9 @@ import logging
 import json
 import requests
 from datetime import datetime
+from google.genai import types
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from google.api_core.exceptions import ResourceExhausted
 
 # Configure logging
 log_directory = os.getenv("LOG_DIR", "logs")
@@ -158,7 +161,15 @@ def call_llm(prompt: str, use_cache: bool = True) -> str:
     return response_text
 
 
+# Add this decorator above your function
+@retry(
+    retry=retry_if_exception_type(ResourceExhausted),
+    wait=wait_exponential(multiplier=2, min=4, max=60), # Wait 4s, then 8s, then 16s...
+    stop=stop_after_attempt(5)
+)
+
 def _call_llm_gemini(prompt: str) -> str:
+    # Initialize client based on available credentials
     if os.getenv("GEMINI_PROJECT_ID"):
         client = genai.Client(
             vertexai=True,
@@ -169,12 +180,47 @@ def _call_llm_gemini(prompt: str) -> str:
         client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
     else:
         raise ValueError("Either GEMINI_PROJECT_ID or GEMINI_API_KEY must be set in the environment")
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-pro-exp-03-25")
-    response = client.models.generate_content(
-        model=model,
-        contents=[prompt]
-    )
-    return response.text
+    
+    # Default to Gemini 3 Pro Preview if not set
+    model = os.getenv("GEMINI_MODEL", "gemini-3-pro-preview")
+    
+    # Configure Thinking based on the model version
+    config = None
+    
+    # GEMINI 3 SPECIFIC: Uses 'thinking_level' (Low/High)
+    if "gemini-3" in model:
+        config = types.GenerateContentConfig(
+            thinking_config=types.ThinkingConfig(
+                include_thoughts=True, 
+                thinking_level="high"  # Options: "low", "high"
+            )
+        )
+    # GEMINI 2.5 SPECIFIC: Uses 'thinking_budget' (Token count)
+    elif "thinking" in model or "gemini-2.5" in model:
+         config = types.GenerateContentConfig(
+            thinking_config=types.ThinkingConfig(
+                include_thoughts=True, 
+                thinking_budget=1024
+            )
+        )
+
+    try:
+        response = client.models.generate_content(
+            model=model,
+            contents=[prompt],
+            config=config
+        )
+        return response.text
+    except Exception as e:
+        # Fallback: specific error handling for models that don't support thinking
+        if "400" in str(e) and "thinking" in str(e).lower():
+            logger.warning(f"Thinking config not supported for {model}, retrying without it.")
+            response = client.models.generate_content(
+                model=model,
+                contents=[prompt]
+            )
+            return response.text
+        raise e
 
 if __name__ == "__main__":
     test_prompt = "Hello, how are you?"
