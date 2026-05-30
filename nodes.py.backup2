@@ -191,8 +191,7 @@ Format the output as a YAML list of dictionaries:
         response = call_llm_with_context(
             prompt=prompt,
             context=rag_context,
-            use_cache=(use_cache and self.cur_retry == 0),
-            include_remote_rag=True
+            use_cache=(use_cache and self.cur_retry == 0)
         )
 
         # --- Validation ---
@@ -373,8 +372,7 @@ Now, provide the YAML output:
         response = call_llm_with_context(
             prompt=prompt,
             context="",  # Context already in prompt, no need to duplicate
-            use_cache=(use_cache and self.cur_retry == 0),
-            include_remote_rag=True
+            use_cache=(use_cache and self.cur_retry == 0)
         )
 
         # --- Validation ---
@@ -517,13 +515,7 @@ Output the ordered list of abstraction indices, including the name in a comment 
 
 Now, provide the YAML output:
 """
-        from utils.call_llm import call_llm_with_context
-        response = call_llm_with_context(
-            prompt=prompt,
-            context="", # Context is already inside the prompt
-            use_cache=(use_cache and self.cur_retry == 0),
-            include_remote_rag=True
-        )
+        response = call_llm(prompt, use_cache=(use_cache and self.cur_retry == 0)) # Use cache only if enabled and not retrying
 
         # --- Validation ---
         yaml_str = response.strip().split("```yaml")[1].split("```")[0].strip()
@@ -767,8 +759,7 @@ Now, directly provide a super beginner-friendly Markdown output (DON'T need ```m
         response = call_llm_with_context(
             prompt=prompt,
             context=file_context_str if file_context_str else "",
-            use_cache=(use_cache and self.cur_retry == 0),
-            include_remote_rag=True
+            use_cache=(use_cache and self.cur_retry == 0)
         )
 
         chapter_content = response

@@ -154,6 +154,31 @@ To run this project in a Docker container, you'll need to pass your API keys as 
    ```
 </details>
 
+<details>
+
+<details>
+
+<summary> <b>New! Remote RAG Integration (Open WebUI)</b> </summary>
+
+**Supercharge your tutorials with external knowledge!**
+
+We've added support for **Remote RAG** (Retrieval-Augmented Generation). This allows PocketFlow to access your private documentation or the latest tech specs (like .NET 10, C# 14) that aren't in the codebase yet.
+
+**Capabilities:**
+- **Hybrid Analysis**: Combines local code analysis with your remote Knowledge Base.
+- **Always Up-to-Date**: Tutorials reference the latest documentation from your Open WebUI server.
+- **Plug & Play**: Just set your credentials in `.env`, and it works automatically alongside the standard analysis.
+
+**Setup:**
+Add to your `.env`:
+```bash
+# Open WebUI Configuration
+OPEN_WEBUI_ENDPOINT=http://localhost:3000
+OPEN_WEBUI_JWT_TOKEN=your_token_here
+OPEN_WEBUI_COLLECTION=your_collection_here
+```
+</details>
+
 ## 💡 Development Tutorial
 
 - I built using [**Agentic Coding**](https://zacharyhuang.substack.com/p/agentic-coding-the-most-fun-way-to), the fastest development paradigm, where humans simply [design](docs/design.md) and agents [code](flow.py).

@@ -113,7 +113,6 @@ class IdentifyAbstractions(Node):
             language,
             use_cache,
             max_abstraction_num,
-            files_data,
         )  # Return all parameters
 
     def exec(self, prep_res):
@@ -125,7 +124,6 @@ class IdentifyAbstractions(Node):
             language,
             use_cache,
             max_abstraction_num,
-            files_data,
         ) = prep_res  # Unpack all parameters
         print(f"Identifying abstractions using LLM...")
 
@@ -175,25 +173,7 @@ Format the output as a YAML list of dictionaries:
     - 5 # path/to/another.js
 # ... up to {max_abstraction_num} abstractions
 ```"""
-        # Build context from most important files (first 5 files by size/relevance)
-        context_files = sorted(
-            [(path, content) for path, content in files_data],
-            key=lambda x: len(x[1]),
-            reverse=True
-        )[:5]
-
-        rag_context = "\n\n".join([
-            f"=== {path} ===\n{content[:2000]}"  # First 2000 chars per file
-            for path, content in context_files
-        ])
-
-        from utils.call_llm import call_llm_with_context
-        response = call_llm_with_context(
-            prompt=prompt,
-            context=rag_context,
-            use_cache=(use_cache and self.cur_retry == 0),
-            include_remote_rag=True
-        )
+        response = call_llm(prompt, use_cache=(use_cache and self.cur_retry == 0))  # Use cache only if enabled and not retrying
 
         # --- Validation ---
         yaml_str = response.strip().split("```yaml")[1].split("```")[0].strip()
@@ -364,18 +344,7 @@ relationships:
 
 Now, provide the YAML output:
 """
-        # Use already gathered context from prep (relevant_files_content_map has the files)
-        # But we can add a focused snippet for relationship analysis
-        from utils.call_llm import call_llm_with_context
-
-        # Context is already built in prep via file_context_str
-        # We'll pass it as additional context
-        response = call_llm_with_context(
-            prompt=prompt,
-            context="",  # Context already in prompt, no need to duplicate
-            use_cache=(use_cache and self.cur_retry == 0),
-            include_remote_rag=True
-        )
+        response = call_llm(prompt, use_cache=(use_cache and self.cur_retry == 0)) # Use cache only if enabled and not retrying
 
         # --- Validation ---
         yaml_str = response.strip().split("```yaml")[1].split("```")[0].strip()
@@ -517,13 +486,7 @@ Output the ordered list of abstraction indices, including the name in a comment 
 
 Now, provide the YAML output:
 """
-        from utils.call_llm import call_llm_with_context
-        response = call_llm_with_context(
-            prompt=prompt,
-            context="", # Context is already inside the prompt
-            use_cache=(use_cache and self.cur_retry == 0),
-            include_remote_rag=True
-        )
+        response = call_llm(prompt, use_cache=(use_cache and self.cur_retry == 0)) # Use cache only if enabled and not retrying
 
         # --- Validation ---
         yaml_str = response.strip().split("```yaml")[1].split("```")[0].strip()
@@ -760,18 +723,7 @@ Instructions for the chapter (Generate content in {language.capitalize()} unless
 
 Now, directly provide a super beginner-friendly Markdown output (DON'T need ```markdown``` tags):
 """
-        from utils.call_llm import call_llm_with_context
-
-        # Context from related files is already in file_context_str
-        # Pass it explicitly as RAG context for better separation
-        response = call_llm_with_context(
-            prompt=prompt,
-            context=file_context_str if file_context_str else "",
-            use_cache=(use_cache and self.cur_retry == 0),
-            include_remote_rag=True
-        )
-
-        chapter_content = response
+        chapter_content = call_llm(prompt, use_cache=(use_cache and self.cur_retry == 0)) # Use cache only if enabled and not retrying
         # Basic validation/cleanup
         actual_heading = f"# Chapter {chapter_num}: {abstraction_name}"  # Use potentially translated name
         if not chapter_content.strip().startswith(f"# Chapter {chapter_num}"):
