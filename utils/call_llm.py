@@ -56,7 +56,7 @@ def get_llm_provider():
 _PROVIDER_DEFAULTS = {
     "MINIMAX": {
         "base_url": "https://api.minimax.io",
-        "model": "MiniMax-M2.7",
+        "model": "MiniMax-M3",
         "min_temperature": 0.01,
         "max_temperature": 1.0,
     },

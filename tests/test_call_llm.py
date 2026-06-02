@@ -68,7 +68,7 @@ class TestProviderDefaults:
 
     def test_minimax_default_model(self):
         from utils.call_llm import _PROVIDER_DEFAULTS
-        assert _PROVIDER_DEFAULTS["MINIMAX"]["model"] == "MiniMax-M2.7"
+        assert _PROVIDER_DEFAULTS["MINIMAX"]["model"] == "MiniMax-M3"
 
     def test_minimax_temperature_range(self):
         from utils.call_llm import _PROVIDER_DEFAULTS
@@ -105,7 +105,7 @@ class TestCallLlmProviderMiniMax:
         payload = call_args[1]["json"]
         headers = call_args[1]["headers"]
         assert "api.minimax.io" in url
-        assert payload["model"] == "MiniMax-M2.7"
+        assert payload["model"] == "MiniMax-M3"
         assert headers["Authorization"] == "Bearer test-key-123"
 
     def test_custom_model_overrides_default(self, monkeypatch):
