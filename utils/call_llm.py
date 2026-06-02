@@ -47,8 +47,20 @@ def get_llm_provider():
     provider = os.getenv("LLM_PROVIDER")
     if not provider and (os.getenv("GEMINI_PROJECT_ID") or os.getenv("GEMINI_API_KEY")):
         provider = "GEMINI"
-    # if necessary, add ANTHROPIC/OPENAI
+    if not provider and os.getenv("MINIMAX_API_KEY"):
+        provider = "MINIMAX"
     return provider
+
+
+# Provider-specific defaults for base URL, model, and temperature range
+_PROVIDER_DEFAULTS = {
+    "MINIMAX": {
+        "base_url": "https://api.minimax.io",
+        "model": "MiniMax-M3",
+        "min_temperature": 0.01,
+        "max_temperature": 1.0,
+    },
+}
 
 
 def _call_llm_provider(prompt: str) -> str:
@@ -73,9 +85,12 @@ def _call_llm_provider(prompt: str) -> str:
     base_url_var = f"{provider}_BASE_URL"
     api_key_var = f"{provider}_API_KEY"
 
-    # Read the provider-specific variables
-    model = os.environ.get(model_var)
-    base_url = os.environ.get(base_url_var)
+    # Look up provider defaults (if any)
+    defaults = _PROVIDER_DEFAULTS.get(provider, {})
+
+    # Read the provider-specific variables, falling back to defaults
+    model = os.environ.get(model_var) or defaults.get("model")
+    base_url = os.environ.get(base_url_var) or defaults.get("base_url")
     api_key = os.environ.get(api_key_var, "")  # API key is optional, default to empty string
 
     # Validate required variables
@@ -94,10 +109,19 @@ def _call_llm_provider(prompt: str) -> str:
     if api_key:  # Only add Authorization header if API key is provided
         headers["Authorization"] = f"Bearer {api_key}"
 
+    # Clamp temperature to the provider's accepted range
+    temperature = 0.7
+    min_temp = defaults.get("min_temperature")
+    max_temp = defaults.get("max_temperature")
+    if min_temp is not None:
+        temperature = max(temperature, min_temp)
+    if max_temp is not None:
+        temperature = min(temperature, max_temp)
+
     payload = {
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.7,
+        "temperature": temperature,
     }
 
     try:
@@ -142,6 +166,9 @@ def call_llm(prompt: str, use_cache: bool = True) -> str:
     if provider == "GEMINI":
         response_text = _call_llm_gemini(prompt)
     else:  # generic method using a URL that is OpenAI compatible API (Ollama, ...)
+        # Ensure LLM_PROVIDER is available for auto-detected providers
+        if provider and not os.environ.get("LLM_PROVIDER"):
+            os.environ["LLM_PROVIDER"] = provider
         response_text = _call_llm_provider(prompt)
 
     # Log the response
