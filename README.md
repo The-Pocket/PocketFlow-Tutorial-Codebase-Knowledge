@@ -158,6 +158,26 @@ To run this project in a Docker container, you'll need to pass your API keys as 
    ```
 </details>
 
+## 📡 Publish to understand-quickly (opt-in)
+
+Add `--publish` to land the generated tutorial in [`looptech-ai/understand-quickly`](https://github.com/looptech-ai/understand-quickly), a public registry of code-knowledge graphs that ships an MCP server. The flag emits a small `generic@1` JSON projection of the tutorial (abstractions/chapters as nodes, relationships as edges) at `<output>/<project>/tutorial.json` with `metadata.{tool, tool_version, generated_at}` plus `commit` when a local git repo is available (i.e. for `--dir`; not always populated for remote `--repo` crawls). If `UNDERSTAND_QUICKLY_TOKEN` is set, it also fires a `repository_dispatch` so the registry resyncs the entry.
+
+```bash
+python main.py --repo https://github.com/example/demo --publish
+```
+
+Without the token, only the local file is written. The drop-in CI step is the [`looptech-ai/uq-publish-action`](https://github.com/looptech-ai/uq-publish-action):
+
+```yaml
+- uses: looptech-ai/uq-publish-action@v0.1.0
+  with:
+    graph-path: 'output/<project>/tutorial.json'
+    format: 'generic@1'
+    token: ${{ secrets.UNDERSTAND_QUICKLY_TOKEN }}
+```
+
+Submitting via `--publish` is governed by the [Understand-Quickly Data License 1.0](https://github.com/looptech-ai/understand-quickly/blob/main/DATA-LICENSE.md). It is opt-in.
+
 ## 💡 Development Tutorial
 
 - I built using [**Agentic Coding**](https://zacharyhuang.substack.com/p/agentic-coding-the-most-fun-way-to), the fastest development paradigm, where humans simply [design](docs/design.md) and agents [code](flow.py).
