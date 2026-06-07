@@ -4,6 +4,7 @@ import logging
 import json
 import requests
 from datetime import datetime
+import dotenv
 
 # Configure logging
 log_directory = os.getenv("LOG_DIR", "logs")
@@ -124,7 +125,7 @@ def _call_llm_provider(prompt: str) -> str:
     except ValueError:
         raise Exception(f"Failed to parse response as JSON from {provider}. The server might have returned an invalid response.")
 
-# By default, we Google Gemini 2.5 pro, as it shows great performance for code understanding
+# By default, we Google Gemini 1.5 flash, as it shows great performance for code understanding
 def call_llm(prompt: str, use_cache: bool = True) -> str:
     # Log the prompt
     logger.info(f"PROMPT: {prompt}")
@@ -169,7 +170,7 @@ def _call_llm_gemini(prompt: str) -> str:
         client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
     else:
         raise ValueError("Either GEMINI_PROJECT_ID or GEMINI_API_KEY must be set in the environment")
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-pro-exp-03-25")
+    model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
     response = client.models.generate_content(
         model=model,
         contents=[prompt]
@@ -177,6 +178,7 @@ def _call_llm_gemini(prompt: str) -> str:
     return response.text
 
 if __name__ == "__main__":
+    dotenv.load_dotenv()
     test_prompt = "Hello, how are you?"
 
     # First call - should hit the API
