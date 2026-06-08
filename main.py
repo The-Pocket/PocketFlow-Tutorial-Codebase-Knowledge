@@ -36,6 +36,8 @@ DEFAULT_EXCLUDE_PATTERNS = {
 }
 
 # --- Main Function ---
+# Main function to parse arguments and initialize the tutorial creation flow
+def main():
 def main():
     parser = argparse.ArgumentParser(description="Generate a tutorial for a GitHub codebase or local directory.")
 
