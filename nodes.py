@@ -379,21 +379,23 @@ Now, provide the YAML output:
             try:
                 from_idx = int(str(rel["from_abstraction"]).split("#")[0].strip())
                 to_idx = int(str(rel["to_abstraction"]).split("#")[0].strip())
-                if not (
-                    0 <= from_idx < num_abstractions and 0 <= to_idx < num_abstractions
-                ):
-                    raise ValueError(
-                        f"Invalid index in relationship: from={from_idx}, to={to_idx}. Max index is {num_abstractions-1}."
-                    )
-                validated_relationships.append(
-                    {
-                        "from": from_idx,
-                        "to": to_idx,
-                        "label": rel["label"],  # Potentially translated label
-                    }
-                )
             except (ValueError, TypeError):
-                raise ValueError(f"Could not parse indices from relationship: {rel}")
+                print(f"Warning: Could not parse indices from relationship, skipping: {rel}")
+                continue
+            if not (
+                0 <= from_idx < num_abstractions and 0 <= to_idx < num_abstractions
+            ):
+                print(
+                    f"Warning: Invalid index in relationship (from={from_idx}, to={to_idx}, max={num_abstractions-1}), skipping."
+                )
+                continue
+            validated_relationships.append(
+                {
+                    "from": from_idx,
+                    "to": to_idx,
+                    "label": rel["label"],  # Potentially translated label
+                }
+            )
 
         print("Generated project summary and relationship details.")
         return {
