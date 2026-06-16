@@ -139,7 +139,7 @@ class IdentifyAbstractions(Node):
             max_abstraction_num,)
             temp = self.exec_mix(prep_res_mix)
             res.extend(temp)
-        return res[:max_abstraction_num]  # Limit to max_abstraction_num
+        return res
         
 
     def exec_mix(self, prep_res):
