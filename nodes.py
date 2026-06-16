@@ -441,6 +441,7 @@ class OrderChapters(Node):
         project_name = shared["project_name"]  # Get project name
         language = shared.get("language", "english")  # Get language
         use_cache = shared.get("use_cache", True)  # Get use_cache flag, default to True
+        max_abstraction_num = shared.get("max_abstraction_num", 10)
 
         # Prepare context for the LLM
         abstraction_info_for_prompt = []
@@ -476,6 +477,7 @@ class OrderChapters(Node):
             project_name,
             list_lang_note,
             use_cache,
+            max_abstraction_num,
         )  # Return use_cache
 
     def exec(self, prep_res):
@@ -486,6 +488,7 @@ class OrderChapters(Node):
             project_name,
             list_lang_note,
             use_cache,
+            max_abstraction_num,
         ) = prep_res  # Unpack use_cache
         print("Determining chapter order using LLM...")
         # No language variation needed here in prompt instructions, just ordering based on structure
@@ -554,7 +557,7 @@ Now, provide the YAML output:
             )
 
         print(f"Determined chapter order (indices): {ordered_indices}")
-        return ordered_indices  # Return the list of indices
+        return ordered_indices[ :max_abstraction_num]  # Return the list of indices
 
     def post(self, shared, prep_res, exec_res):
         # exec_res is already the list of ordered indices
