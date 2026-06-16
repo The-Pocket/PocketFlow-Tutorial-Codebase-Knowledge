@@ -3,6 +3,52 @@ import fnmatch
 import pathspec
 
 
+def split_text_content(content: str, chunk_size: int = 20_000) -> list[str]:
+    """
+    将文本按最大字符数分割。
+
+    优先在换行符处切分，避免把一行代码从中间截断；
+    如果指定范围内没有换行符，则直接按 chunk_size 强制切分。
+
+    Args:
+        content: 文件文本内容
+        chunk_size: 每段最大字符数
+
+    Returns:
+        分割后的文本列表
+    """
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be greater than 0")
+
+    if len(content) <= chunk_size:
+        return [content]
+
+    chunks = []
+    start = 0
+    content_length = len(content)
+
+    while start < content_length:
+        end = min(start + chunk_size, content_length)
+
+        # 不是最后一段时，尝试在最后一个换行符处切割
+        if end < content_length:
+            split_position = content.rfind("\n", start, end)
+
+            # 当前范围内没有合适的换行符，则强制按 chunk_size 切割
+            if split_position <= start:
+                split_position = end
+            else:
+                # 将换行符保留在当前 chunk 中
+                split_position += 1
+        else:
+            split_position = end
+
+        chunks.append(content[start:split_position])
+        start = split_position
+
+    return chunks
+
+
 def crawl_local_files(
     directory,
     include_patterns=None,
@@ -115,6 +161,25 @@ def crawl_local_files(
         try:
             with open(filepath, "r", encoding="utf-8-sig") as f:
                 content = f.read()
+            chunks = split_text_content(
+                content=content,
+            )
+
+            if len(chunks) == 1:
+                # 小文件继续使用原始 key
+                files_dict[relpath] = chunks[0]
+                status = "processed"
+
+            else:
+                # 大文件拆成 filepath_1、filepath_2...
+                for chunk_index, chunk in enumerate(chunks, start=1):
+                    chunk_key = f"{relpath}_{chunk_index}"
+                    files_dict[chunk_key] = chunk
+
+                status = (
+                    f"processed "
+                    f"(split into {len(chunks)} chunks)"
+                )
             files_dict[relpath] = content
         except Exception as e:
             print(f"Warning: Could not read file {filepath}: {e}")
@@ -127,7 +192,6 @@ def crawl_local_files(
             print(f"\033[92mProgress: {processed_files}/{total_files} ({rounded_percentage}%) {relpath} [{status}]\033[0m")
 
     return {"files": files_dict}
-
 
 if __name__ == "__main__":
     print("--- Crawling parent directory ('..') ---")
