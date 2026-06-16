@@ -81,6 +81,7 @@ class FetchRepo(Node):
         shared["files"] = exec_res  # List of (path, content) tuples
 
 
+
 class IdentifyAbstractions(Node):
     def prep(self, shared):
         files_data = shared["files"]
@@ -91,22 +92,24 @@ class IdentifyAbstractions(Node):
 
         # Helper to create context from files, respecting limits (basic example)
         def create_llm_context(files_data):
+            context_list = []
             context = ""
             file_info = []  # Store tuples of (index, path)
             for i, (path, content) in enumerate(files_data):
                 entry = f"--- File Index {i}: {path} ---\n{content}\n\n"
                 context += entry
+                context_list.append(entry)
                 file_info.append((i, path))
 
-            return context, file_info  # file_info is list of (index, path)
+            return context_list, file_info  # file_info is list of (index, path)
 
-        context, file_info = create_llm_context(files_data)
+        context_list, file_info = create_llm_context(files_data)
         # Format file info for the prompt (comment is just a hint for LLM)
         file_listing_for_prompt = "\n".join(
             [f"- {idx} # {path}" for idx, path in file_info]
         )
         return (
-            context,
+            context_list,
             file_listing_for_prompt,
             len(files_data),
             project_name,
@@ -114,8 +117,32 @@ class IdentifyAbstractions(Node):
             use_cache,
             max_abstraction_num,
         )  # Return all parameters
-
+        
     def exec(self, prep_res):
+        (
+            context_list,
+            file_listing_for_prompt,
+            file_count,
+            project_name,
+            language,
+            use_cache,
+            max_abstraction_num,
+        ) = prep_res
+        res = []
+        # max_abstraction_num = 30
+        for context in context_list:
+            prep_res_mix = (context,file_listing_for_prompt,
+            file_count,
+            project_name,
+            language,
+            use_cache,
+            max_abstraction_num,)
+            temp = self.exec_mix(prep_res_mix)
+            res.extend(temp)
+        return res[:max_abstraction_num]  # Limit to max_abstraction_num
+        
+
+    def exec_mix(self, prep_res):
         (
             context,
             file_listing_for_prompt,
@@ -136,7 +163,6 @@ class IdentifyAbstractions(Node):
             # Keep specific hints here as name/description are primary targets
             name_lang_hint = f" (value in {language.capitalize()})"
             desc_lang_hint = f" (value in {language.capitalize()})"
-
         prompt = f"""
 For the project `{project_name}`:
 
@@ -235,6 +261,7 @@ Format the output as a YAML list of dictionaries:
         shared["abstractions"] = (
             exec_res  # List of {"name": str, "description": str, "files": [int]}
         )
+
 
 
 class AnalyzeRelationships(Node):
