@@ -90,6 +90,12 @@ This is a tutorial project of [Pocket Flow](https://github.com/The-Pocket/Pocket
    ```
 
 4. Set up LLM in [`utils/call_llm.py`](./utils/call_llm.py) by providing credentials. To do so, you can put the values in a `.env` file. By default, you can use the AI Studio key with this client for Gemini Pro 2.5 by setting the `GEMINI_API_KEY` environment variable. If you want to use another LLM, you can set the `LLM_PROVIDER` environment variable (e.g. `XAI`), and then set the model, url, and API key (e.g. `XAI_MODEL`, `XAI_URL`,`XAI_API_KEY`). If using Ollama, the url is `http://localhost:11434/` and the API key can be omitted.
+
+   **Use your Claude subscription instead of a metered API (`CLAUDE_LOCAL`):** Set `LLM_PROVIDER=CLAUDE_LOCAL` to route requests through the [Claude Code CLI](https://claude.ai/install.sh) in headless mode, so usage bills against your Claude subscription (Pro/Max/Team) rather than per-token API credits. To use it:
+   - Install the CLI: `curl -fsSL https://claude.ai/install.sh | bash`
+   - Authenticate via browser login: `claude auth login`
+   - Do **not** set `ANTHROPIC_API_KEY` — if set, billing would route through the metered API, so the provider refuses to run.
+   - Optionally set `CLAUDE_CLI_TIMEOUT` (seconds, default `120`) to adjust the per-call timeout.
    You can use your own models. We highly recommend the latest models with thinking capabilities (Claude 3.7 with thinking, O1). You can verify that it is correctly set up by running:
    ```bash
    python utils/call_llm.py

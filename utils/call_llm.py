@@ -2,6 +2,8 @@ from google import genai
 import os
 import logging
 import json
+import shutil
+import subprocess
 import requests
 from datetime import datetime
 
@@ -47,7 +49,8 @@ def get_llm_provider():
     provider = os.getenv("LLM_PROVIDER")
     if not provider and (os.getenv("GEMINI_PROJECT_ID") or os.getenv("GEMINI_API_KEY")):
         provider = "GEMINI"
-    # if necessary, add ANTHROPIC/OPENAI
+    # Recognized values: "GEMINI", "CLAUDE_LOCAL" (Claude Code CLI, subscription
+    # billing), or any OpenAI-compatible provider name (e.g. "OLLAMA", "XAI").
     return provider
 
 
@@ -141,6 +144,8 @@ def call_llm(prompt: str, use_cache: bool = True) -> str:
     provider = get_llm_provider()
     if provider == "GEMINI":
         response_text = _call_llm_gemini(prompt)
+    elif provider == "CLAUDE_LOCAL":
+        response_text = _call_llm_claude_local(prompt)
     else:  # generic method using a URL that is OpenAI compatible API (Ollama, ...)
         response_text = _call_llm_provider(prompt)
 
@@ -175,6 +180,74 @@ def _call_llm_gemini(prompt: str) -> str:
         contents=[prompt]
     )
     return response.text
+
+
+def _call_llm_claude_local(prompt: str) -> str:
+    """
+    Call Claude via the Claude Code CLI (`claude`) in headless mode.
+
+    This routes usage through a Claude subscription (Pro/Max/Team) via the
+    browser login used by the CLI, rather than the metered API. It deliberately
+    does NOT use the anthropic Python SDK or claude-agent-sdk, both of which
+    bill against ANTHROPIC_API_KEY (per-token API credits).
+
+    Environment variables:
+    - CLAUDE_CLI_TIMEOUT: subprocess timeout in seconds (default 120).
+    """
+    # Guard: a set ANTHROPIC_API_KEY would route the CLI through the metered API.
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        raise ValueError(
+            "ANTHROPIC_API_KEY is set, which would route billing through the "
+            "metered Anthropic API instead of your Claude subscription. Unset "
+            "ANTHROPIC_API_KEY before using LLM_PROVIDER=CLAUDE_LOCAL, or choose "
+            "a different provider."
+        )
+
+    # Guard: the CLI must be installed and authenticated.
+    if shutil.which("claude") is None:
+        raise RuntimeError(
+            "The `claude` CLI (Claude Code) was not found on PATH. Install it "
+            "with `curl -fsSL https://claude.ai/install.sh | bash` and "
+            "authenticate with `claude auth login` (browser login, so usage "
+            "bills against your subscription)."
+        )
+
+    # Second guard: pass an explicit environment with ANTHROPIC_API_KEY removed.
+    env = os.environ.copy()
+    env.pop("ANTHROPIC_API_KEY", None)
+
+    timeout = int(os.environ.get("CLAUDE_CLI_TIMEOUT", "120"))
+
+    # Pass the prompt on stdin rather than as an argv element. These prompts
+    # embed whole-codebase context and easily exceed the OS ARG_MAX limit,
+    # which would raise "OSError: [Errno 7] Argument list too long". With no
+    # prompt argument after -p, the CLI reads the prompt from stdin.
+    cmd = ["claude", "-p", "--output-format", "json", "--allowedTools", ""]
+    result = subprocess.run(
+        cmd,
+        input=prompt,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=timeout,
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"`claude` CLI exited with code {result.returncode}: {result.stderr.strip()}"
+        )
+
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as e:
+        raise RuntimeError(
+            "Failed to parse `claude` CLI output as JSON (CLI banners or "
+            f"first-run notices may have polluted stdout): {e}\n"
+            f"Raw stdout:\n{result.stdout}"
+        )
+
+    return payload["result"]
+
 
 if __name__ == "__main__":
     test_prompt = "Hello, how are you?"
