@@ -15,8 +15,8 @@
 This is a tutorial project of [Pocket Flow](https://github.com/The-Pocket/PocketFlow), a 100-line LLM framework. It crawls GitHub repositories and builds a knowledge base from the code. It analyzes entire codebases to identify core abstractions and how they interact, and transforms complex code into beginner-friendly tutorials with clear visualizations.
 
 
-- Check out the [book "Crack Any Codebase with AI"](https://www.manning.com/books/crack-any-codebase-with-ai) for more! 
- 
+- Check out the [book "Crack Any Codebase with AI"](https://www.manning.com/books/crack-any-codebase-with-ai) for more!
+
 - Check out the [YouTube Development Tutorial](https://youtu.be/AFY67zOpbSo) for more!
 
 - Check out the [Substack Post Tutorial](https://zacharyhuang.substack.com/p/ai-codebase-knowledge-builder-full) for more!
@@ -122,10 +122,10 @@ The application will crawl the repository, analyze the codebase structure, gener
 
 
 <details>
- 
+
 <summary> 🐳 <b>Running with Docker</b> </summary>
 
-To run this project in a Docker container, you'll need to pass your API keys as environment variables. 
+To run this project in a Docker container, you'll need to pass your API keys as environment variables.
 
 1. Build the Docker image
    ```bash
@@ -135,20 +135,20 @@ To run this project in a Docker container, you'll need to pass your API keys as 
 2. Run the container
 
    You'll need to provide your `GEMINI_API_KEY` for the LLM to function. If you're analyzing private GitHub repositories or want to avoid rate limits, also provide your `GITHUB_TOKEN`.
-   
+
    Mount a local directory to `/app/output` inside the container to access the generated tutorials on your host machine.
-   
+
    **Example for analyzing a public GitHub repository:**
-   
+
    ```bash
    docker run -it --rm \
      -e GEMINI_API_KEY="YOUR_GEMINI_API_KEY_HERE" \
      -v "$(pwd)/output_tutorials":/app/output \
      pocketflow-app --repo https://github.com/username/repo
    ```
-   
+
    **Example for analyzing a local directory:**
-   
+
    ```bash
    docker run -it --rm \
      -e GEMINI_API_KEY="YOUR_GEMINI_API_KEY_HERE" \
