@@ -10,7 +10,7 @@ Ever stared at a new codebase written by others feeling completely lost? This pr
 
 <p align="center">
   <a href="https://github.com/The-Pocket/PocketFlow" target="_blank">
-    <img 
+    <img
       src="https://raw.githubusercontent.com/The-Pocket/Tutorial-Codebase-Knowledge/refs/heads/main/assets/banner.png" width="800"
     />
   </a>
