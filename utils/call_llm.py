@@ -31,6 +31,8 @@ def _call_llm_provider(prompt: str) -> str:
         return _call_llm_gemini(prompt)
     elif provider == "deepseek":
         return _call_llm_deepseek(prompt)
+    elif provider == "kimi":
+        return _call_llm_kimi(prompt)
     else:
         raise ValueError(f"Unsupported LLM provider: {provider}")
 
@@ -77,6 +79,24 @@ def _call_llm_deepseek(prompt: str) -> str:
     base_url = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
     model = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
     logger.debug("Using DeepSeek model: %s at %s", model, base_url)
+    client = OpenAI(api_key=api_key, base_url=base_url)
+    response = client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return response.choices[0].message.content
+
+
+def _call_llm_kimi(prompt: str) -> str:
+    from openai import OpenAI
+
+    api_key = os.environ.get("KIMI_API_KEY")
+    if not api_key:
+        logger.error("KIMI_API_KEY environment variable not set.")
+        raise ValueError("KIMI_API_KEY environment variable not set.")
+    base_url = os.environ.get("KIMI_BASE_URL", "https://api.moonshot.cn/v1")
+    model = os.environ.get("KIMI_MODEL", "moonshot-v1-8k")
+    logger.debug("Using Kimi model: %s at %s", model, base_url)
     client = OpenAI(api_key=api_key, base_url=base_url)
     response = client.chat.completions.create(
         model=model,
