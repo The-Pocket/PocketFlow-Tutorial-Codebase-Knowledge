@@ -53,6 +53,16 @@ def save_cache(cache):
         logger.warning(f"Failed to save cache")
 
 
+def invalidate_cache(prompt: str):
+    try:
+        cache = load_cache()
+        if prompt in cache:
+            del cache[prompt]
+            save_cache(cache)
+    except Exception as e:
+        logger.warning(f"Failed to invalidate cache: {e}")
+
+
 def get_llm_provider():
     provider = os.getenv("LLM_PROVIDER")
     if not provider and (os.getenv("GEMINI_PROJECT_ID") or os.getenv("GEMINI_API_KEY")):
