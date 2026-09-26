@@ -1,9 +1,19 @@
-from google import genai
 import os
 import logging
 import json
 import requests
 from datetime import datetime
+from pathlib import Path
+from dotenv import load_dotenv, find_dotenv
+
+try:
+    from google import genai
+except ImportError:
+    genai = None
+
+# Load environment variables from .env file
+env_path = find_dotenv() or str(Path(__file__).resolve().parent.parent / ".env")
+load_dotenv(env_path)
 
 # Configure logging
 log_directory = os.getenv("LOG_DIR", "logs")
@@ -43,6 +53,16 @@ def save_cache(cache):
         logger.warning(f"Failed to save cache")
 
 
+def invalidate_cache(prompt: str):
+    try:
+        cache = load_cache()
+        if prompt in cache:
+            del cache[prompt]
+            save_cache(cache)
+    except Exception as e:
+        logger.warning(f"Failed to invalidate cache: {e}")
+
+
 def get_llm_provider():
     provider = os.getenv("LLM_PROVIDER")
     if not provider and (os.getenv("GEMINI_PROJECT_ID") or os.getenv("GEMINI_API_KEY")):
@@ -75,14 +95,14 @@ def _call_llm_provider(prompt: str) -> str:
 
     # Read the provider-specific variables
     model = os.environ.get(model_var)
-    base_url = os.environ.get(base_url_var)
+    base_url = os.environ.get(base_url_var) or os.environ.get(f"{provider}_URL")
     api_key = os.environ.get(api_key_var, "")  # API key is optional, default to empty string
 
     # Validate required variables
     if not model:
         raise ValueError(f"{model_var} environment variable is required")
     if not base_url:
-        raise ValueError(f"{base_url_var} environment variable is required")
+        raise ValueError(f"{base_url_var} (or {provider}_URL) environment variable is required")
 
     # Append the endpoint to the base URL
     url = f"{base_url.rstrip('/')}/v1/chat/completions"
@@ -159,6 +179,8 @@ def call_llm(prompt: str, use_cache: bool = True) -> str:
 
 
 def _call_llm_gemini(prompt: str) -> str:
+    if genai is None:
+        raise ImportError("google-genai is required for GEMINI provider. Run: pip install google-genai")
     if os.getenv("GEMINI_PROJECT_ID"):
         client = genai.Client(
             vertexai=True,

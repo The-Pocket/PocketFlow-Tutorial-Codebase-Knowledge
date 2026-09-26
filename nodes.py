@@ -3,8 +3,22 @@ import re
 import yaml
 from pocketflow import Node, BatchNode
 from utils.crawl_github_files import crawl_github_files
-from utils.call_llm import call_llm
+from utils.call_llm import call_llm, invalidate_cache
 from utils.crawl_local_files import crawl_local_files
+
+
+def extract_yaml_str(response: str) -> str:
+    """Extract YAML string from LLM response, handling ```yaml, ```yml, ```, or raw YAML."""
+    match = re.search(r"```(?:yaml|yml)?\s*\n(.*?)\n```", response, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    if "```yaml" in response:
+        return response.split("```yaml", 1)[1].split("```", 1)[0].strip()
+    if "```yml" in response:
+        return response.split("```yml", 1)[1].split("```", 1)[0].strip()
+    if "```" in response:
+        return response.split("```", 1)[1].split("```", 1)[0].strip()
+    return response.strip()
 
 
 # Helper to get content for specific file indices
@@ -176,10 +190,15 @@ Format the output as a YAML list of dictionaries:
         response = call_llm(prompt, use_cache=(use_cache and self.cur_retry == 0))  # Use cache only if enabled and not retrying
 
         # --- Validation ---
-        yaml_str = response.strip().split("```yaml")[1].split("```")[0].strip()
-        abstractions = yaml.safe_load(yaml_str)
+        yaml_str = extract_yaml_str(response)
+        try:
+            abstractions = yaml.safe_load(yaml_str)
+        except Exception as e:
+            invalidate_cache(prompt)
+            raise ValueError(f"Failed to parse YAML in IdentifyAbstractions: {e}\nRaw output: {response}")
 
         if not isinstance(abstractions, list):
+            invalidate_cache(prompt)
             raise ValueError("LLM Output is not a list")
 
         validated_abstractions = []
@@ -187,13 +206,11 @@ Format the output as a YAML list of dictionaries:
             if not isinstance(item, dict) or not all(
                 k in item for k in ["name", "description", "file_indices"]
             ):
-                raise ValueError(f"Missing keys in abstraction item: {item}")
-            if not isinstance(item["name"], str):
-                raise ValueError(f"Name is not a string in item: {item}")
-            if not isinstance(item["description"], str):
-                raise ValueError(f"Description is not a string in item: {item}")
+                continue
+            if not isinstance(item["name"], str) or not isinstance(item["description"], str):
+                continue
             if not isinstance(item["file_indices"], list):
-                raise ValueError(f"file_indices is not a list in item: {item}")
+                item["file_indices"] = []
 
             # Validate indices
             validated_indices = []
@@ -203,33 +220,63 @@ Format the output as a YAML list of dictionaries:
                         idx = idx_entry
                     elif isinstance(idx_entry, str) and "#" in idx_entry:
                         idx = int(idx_entry.split("#")[0].strip())
+                    elif isinstance(idx_entry, str):
+                        m = re.match(r"^\s*(\d+)", idx_entry)
+                        idx = int(m.group(1)) if m else None
                     else:
                         idx = int(str(idx_entry).strip())
 
-                    if not (0 <= idx < file_count):
-                        raise ValueError(
-                            f"Invalid file index {idx} found in item {item['name']}. Max index is {file_count - 1}."
+                    if idx is not None and 0 <= idx < file_count:
+                        validated_indices.append(idx)
+                    else:
+                        print(
+                            f"Warning: Invalid file index {idx} in abstraction {item.get('name')}. Max index is {file_count - 1}."
                         )
-                    validated_indices.append(idx)
                 except (ValueError, TypeError):
-                    raise ValueError(
-                        f"Could not parse index from entry: {idx_entry} in item {item['name']}"
-                    )
+                    continue
+
+            if not validated_indices and file_count > 0:
+                validated_indices = [0]
 
             item["files"] = sorted(list(set(validated_indices)))
             # Store only the required fields
             validated_abstractions.append(
                 {
-                    "name": item["name"],  # Potentially translated name
+                    "name": item["name"].strip(),  # Potentially translated name
                     "description": item[
                         "description"
-                    ],  # Potentially translated description
+                    ].strip(),  # Potentially translated description
                     "files": item["files"],
                 }
             )
 
+        if not validated_abstractions:
+            invalidate_cache(prompt)
+            raise ValueError("No valid abstractions could be parsed from LLM output")
+
         print(f"Identified {len(validated_abstractions)} abstractions.")
         return validated_abstractions
+
+    def exec_fallback(self, prep_res, exc):
+        (
+            context,
+            file_listing_for_prompt,
+            file_count,
+            project_name,
+            language,
+            use_cache,
+            max_abstraction_num,
+        ) = prep_res
+        print(f"Warning: Failed to identify abstractions ({exc}). Falling back to default abstractions.")
+        count = min(file_count, max_abstraction_num, 5)
+        fallback_abstractions = []
+        for i in range(max(1, count)):
+            fallback_abstractions.append({
+                "name": f"Module {i + 1}",
+                "description": f"Core component of {project_name}.",
+                "files": [i] if i < file_count else [0],
+            })
+        return fallback_abstractions
 
     def post(self, shared, prep_res, exec_res):
         shared["abstractions"] = (
@@ -295,6 +342,14 @@ class AnalyzeRelationships(Node):
             language,
             use_cache,
          ) = prep_res  # Unpack use_cache
+
+        if num_abstractions <= 1:
+            print(f"Only {num_abstractions} abstraction(s); skipping relationship analysis.")
+            return {
+                "summary": f"Overview of the {project_name} project.",
+                "details": [],
+            }
+
         print(f"Analyzing relationships using LLM...")
 
         # Add language instruction and hints only if not English
@@ -305,6 +360,20 @@ class AnalyzeRelationships(Node):
             language_instruction = f"IMPORTANT: Generate the `summary` and relationship `label` fields in **{language.capitalize()}** language. Do NOT use English for these fields.\n\n"
             lang_hint = f" (in {language.capitalize()})"
             list_lang_note = f" (Names might be in {language.capitalize()})"  # Note for the input list
+
+        if num_abstractions >= 3:
+            rel_example = f"""relationships:
+  - from_abstraction: 0 # AbstractionName1
+    to_abstraction: 1 # AbstractionName2
+    label: "Manages"{lang_hint}
+  - from_abstraction: 2 # AbstractionName3
+    to_abstraction: 0 # AbstractionName1
+    label: "Provides config"{lang_hint}"""
+        else:
+            rel_example = f"""relationships:
+  - from_abstraction: 0 # AbstractionName1
+    to_abstraction: 1 # AbstractionName2
+    label: "Interacts with"{lang_hint}"""
 
         prompt = f"""
 Based on the following abstractions and relevant code snippets from the project `{project_name}`:
@@ -324,7 +393,7 @@ Context (Abstractions, Descriptions, Code):
     Ideally the relationship should be backed by one abstraction calling or passing parameters to another.
     Simplify the relationship and exclude those non-important ones.
 
-IMPORTANT: Make sure EVERY abstraction is involved in at least ONE relationship (either as source or target). Each abstraction index must appear at least once across all relationships.
+IMPORTANT: Make sure EVERY abstraction is involved in at least ONE relationship (either as source or target). Each abstraction index must appear at least once across all relationships. Valid indices are only from 0 to {num_abstractions - 1}.
 
 Format the output as YAML:
 
@@ -332,13 +401,7 @@ Format the output as YAML:
 summary: |
   A brief, simple explanation of the project{lang_hint}.
   Can span multiple lines with **bold** and *italic* for emphasis.
-relationships:
-  - from_abstraction: 0 # AbstractionName1
-    to_abstraction: 1 # AbstractionName2
-    label: "Manages"{lang_hint}
-  - from_abstraction: 2 # AbstractionName3
-    to_abstraction: 0 # AbstractionName1
-    label: "Provides config"{lang_hint}
+{rel_example}
   # ... other relationships
 ```
 
@@ -347,58 +410,83 @@ Now, provide the YAML output:
         response = call_llm(prompt, use_cache=(use_cache and self.cur_retry == 0)) # Use cache only if enabled and not retrying
 
         # --- Validation ---
-        yaml_str = response.strip().split("```yaml")[1].split("```")[0].strip()
-        relationships_data = yaml.safe_load(yaml_str)
+        yaml_str = extract_yaml_str(response)
+        try:
+            relationships_data = yaml.safe_load(yaml_str)
+        except Exception as e:
+            invalidate_cache(prompt)
+            raise ValueError(f"Failed to parse YAML in AnalyzeRelationships: {e}\nRaw output: {response}")
 
-        if not isinstance(relationships_data, dict) or not all(
-            k in relationships_data for k in ["summary", "relationships"]
-        ):
-            raise ValueError(
-                "LLM output is not a dict or missing keys ('summary', 'relationships')"
-            )
-        if not isinstance(relationships_data["summary"], str):
-            raise ValueError("summary is not a string")
-        if not isinstance(relationships_data["relationships"], list):
-            raise ValueError("relationships is not a list")
+        if not isinstance(relationships_data, dict):
+            invalidate_cache(prompt)
+            raise ValueError("LLM output is not a dict")
+
+        summary = relationships_data.get("summary", f"Overview of the {project_name} project.")
+        if not isinstance(summary, str):
+            summary = str(summary)
 
         # Validate relationships structure
         validated_relationships = []
-        for rel in relationships_data["relationships"]:
-            # Check for 'label' key
+        raw_relationships = relationships_data.get("relationships", [])
+        if not isinstance(raw_relationships, list):
+            raw_relationships = []
+
+        for rel in raw_relationships:
             if not isinstance(rel, dict) or not all(
-                k in rel for k in ["from_abstraction", "to_abstraction", "label"]
+                k in rel for k in ["from_abstraction", "to_abstraction"]
             ):
-                raise ValueError(
-                    f"Missing keys (expected from_abstraction, to_abstraction, label) in relationship item: {rel}"
-                )
-            # Validate 'label' is a string
-            if not isinstance(rel["label"], str):
-                raise ValueError(f"Relationship label is not a string: {rel}")
+                continue
+
+            label = str(rel.get("label", "Interacts with"))
 
             # Validate indices
             try:
                 from_idx = int(str(rel["from_abstraction"]).split("#")[0].strip())
                 to_idx = int(str(rel["to_abstraction"]).split("#")[0].strip())
-                if not (
-                    0 <= from_idx < num_abstractions and 0 <= to_idx < num_abstractions
-                ):
-                    raise ValueError(
-                        f"Invalid index in relationship: from={from_idx}, to={to_idx}. Max index is {num_abstractions-1}."
+                if 0 <= from_idx < num_abstractions and 0 <= to_idx < num_abstractions:
+                    validated_relationships.append(
+                        {
+                            "from": from_idx,
+                            "to": to_idx,
+                            "label": label,
+                        }
                     )
-                validated_relationships.append(
-                    {
-                        "from": from_idx,
-                        "to": to_idx,
-                        "label": rel["label"],  # Potentially translated label
-                    }
-                )
+                else:
+                    print(
+                        f"Warning: Skipping relationship with out-of-range index: from={from_idx}, to={to_idx}. Max index is {num_abstractions-1}."
+                    )
             except (ValueError, TypeError):
-                raise ValueError(f"Could not parse indices from relationship: {rel}")
+                continue
+
+        if not validated_relationships and num_abstractions >= 2:
+            print("Warning: No valid relationships parsed from LLM. Generating default relationships.")
+            for i in range(num_abstractions - 1):
+                validated_relationships.append(
+                    {"from": i, "to": i + 1, "label": "Interacts with"}
+                )
 
         print("Generated project summary and relationship details.")
         return {
-            "summary": relationships_data["summary"],  # Potentially translated summary
-            "details": validated_relationships,  # Store validated, index-based relationships with potentially translated labels
+            "summary": summary,
+            "details": validated_relationships,
+        }
+
+    def exec_fallback(self, prep_res, exc):
+        (
+            context,
+            abstraction_listing,
+            num_abstractions,
+            project_name,
+            language,
+            use_cache,
+        ) = prep_res
+        print(f"Warning: Failed to analyze relationships ({exc}). Falling back to default relationships.")
+        details = []
+        for i in range(max(0, num_abstractions - 1)):
+            details.append({"from": i, "to": i + 1, "label": "Interacts with"})
+        return {
+            "summary": f"Overview of the {project_name} project architecture and core abstractions.",
+            "details": details,
         }
 
     def post(self, shared, prep_res, exec_res):
@@ -460,9 +548,19 @@ class OrderChapters(Node):
             list_lang_note,
             use_cache,
         ) = prep_res  # Unpack use_cache
+
+        if num_abstractions <= 1:
+            print(f"Only {num_abstractions} abstraction(s); skipping chapter order determination.")
+            return list(range(num_abstractions))
+
         print("Determining chapter order using LLM...")
-        # No language variation needed here in prompt instructions, just ordering based on structure
-        # The input names might be translated, hence the note.
+
+        # Generate dynamic example using actual valid indices
+        example_lines = []
+        for i in range(min(num_abstractions, 3)):
+            example_lines.append(f"- {i} # Abstraction_{i}")
+        example_str = "\n".join(example_lines)
+
         prompt = f"""
 Given the following project abstractions and their relationships for the project ```` {project_name} ````:
 
@@ -475,13 +573,16 @@ Context about relationships and project summary:
 If you are going to make a tutorial for ```` {project_name} ````, what is the best order to explain these abstractions, from first to last?
 Ideally, first explain those that are the most important or foundational, perhaps user-facing concepts or entry points. Then move to more detailed, lower-level implementation details or supporting concepts.
 
+CRITICAL INSTRUCTIONS:
+- You must ONLY use the exact indices listed above: {list(range(num_abstractions))}.
+- Do NOT invent or add any new abstractions or indices.
+- Every index from 0 to {num_abstractions - 1} must appear exactly once in your ordered list.
+- Valid indices are ONLY integers from 0 to {num_abstractions - 1}.
+
 Output the ordered list of abstraction indices, including the name in a comment for clarity. Use the format `idx # AbstractionName`.
 
 ```yaml
-- 2 # FoundationalConcept
-- 0 # CoreClassA
-- 1 # CoreClassB (uses CoreClassA)
-- ...
+{example_str}
 ```
 
 Now, provide the YAML output:
@@ -489,45 +590,73 @@ Now, provide the YAML output:
         response = call_llm(prompt, use_cache=(use_cache and self.cur_retry == 0)) # Use cache only if enabled and not retrying
 
         # --- Validation ---
-        yaml_str = response.strip().split("```yaml")[1].split("```")[0].strip()
-        ordered_indices_raw = yaml.safe_load(yaml_str)
+        yaml_str = extract_yaml_str(response)
+        try:
+            ordered_indices_raw = yaml.safe_load(yaml_str)
+        except Exception as e:
+            invalidate_cache(prompt)
+            raise ValueError(f"Failed to parse YAML from LLM output in OrderChapters: {e}\nRaw output: {response}")
 
         if not isinstance(ordered_indices_raw, list):
+            invalidate_cache(prompt)
             raise ValueError("LLM output is not a list")
 
-        ordered_indices = []
-        seen_indices = set()
+        parsed_entries = []
         for entry in ordered_indices_raw:
             try:
                 if isinstance(entry, int):
                     idx = entry
                 elif isinstance(entry, str) and "#" in entry:
                     idx = int(entry.split("#")[0].strip())
+                elif isinstance(entry, str):
+                    m = re.match(r"^\s*(\d+)", entry)
+                    if m:
+                        idx = int(m.group(1))
+                    else:
+                        continue
                 else:
                     idx = int(str(entry).strip())
-
-                if not (0 <= idx < num_abstractions):
-                    raise ValueError(
-                        f"Invalid index {idx} in ordered list. Max index is {num_abstractions-1}."
-                    )
-                if idx in seen_indices:
-                    raise ValueError(f"Duplicate index {idx} found in ordered list.")
-                ordered_indices.append(idx)
-                seen_indices.add(idx)
-
+                parsed_entries.append((idx, entry))
             except (ValueError, TypeError):
-                raise ValueError(
-                    f"Could not parse index from ordered list entry: {entry}"
+                continue
+
+        # Check for 1-based indexing (e.g. LLM output 1..N instead of 0..N-1)
+        raw_indices = [idx for idx, _ in parsed_entries]
+        if set(raw_indices) == set(range(1, num_abstractions + 1)):
+            parsed_entries = [(idx - 1, entry) for idx, entry in parsed_entries]
+
+        ordered_indices = []
+        seen_indices = set()
+        for idx, entry in parsed_entries:
+            if 0 <= idx < num_abstractions:
+                if idx not in seen_indices:
+                    ordered_indices.append(idx)
+                    seen_indices.add(idx)
+            else:
+                print(
+                    f"Warning: Ignoring out-of-range index {idx} in ordered list (max index is {num_abstractions-1}) from entry: {entry}"
                 )
 
-        # Check if all abstractions are included
+        # Check if all abstractions are included, append any missing indices
         if len(ordered_indices) != num_abstractions:
-            raise ValueError(
-                f"Ordered list length ({len(ordered_indices)}) does not match number of abstractions ({num_abstractions}). Missing indices: {set(range(num_abstractions)) - seen_indices}"
-            )
+            missing = [i for i in range(num_abstractions) if i not in seen_indices]
+            print(f"Warning: Chapter order missing indices {missing}. Appending them.")
+            ordered_indices.extend(missing)
 
         print(f"Determined chapter order (indices): {ordered_indices}")
         return ordered_indices  # Return the list of indices
+
+    def exec_fallback(self, prep_res, exc):
+        (
+            abstraction_listing,
+            context,
+            num_abstractions,
+            project_name,
+            list_lang_note,
+            use_cache,
+        ) = prep_res
+        print(f"Warning: Failed to determine chapter order ({exc}). Falling back to default sequential order [0..{num_abstractions-1}].")
+        return list(range(num_abstractions))
 
     def post(self, shared, prep_res, exec_res):
         # exec_res is already the list of ordered indices
@@ -595,13 +724,13 @@ class WriteChapters(BatchNode):
                 prev_chapter = None
                 if i > 0:
                     prev_idx = chapter_order[i - 1]
-                    prev_chapter = chapter_filenames[prev_idx]
+                    prev_chapter = chapter_filenames.get(prev_idx)
 
                 # Get next chapter info for transitions (uses potentially translated name)
                 next_chapter = None
                 if i < len(chapter_order) - 1:
                     next_idx = chapter_order[i + 1]
-                    next_chapter = chapter_filenames[next_idx]
+                    next_chapter = chapter_filenames.get(next_idx)
 
                 items_to_process.append(
                     {
@@ -782,12 +911,16 @@ class CombineTutorial(Node):
                 f'    {node_id}["{node_label}"]'
             )  # Node label uses potentially translated name
         # Add edges for relationships using potentially translated labels
-        for rel in relationships_data["details"]:
-            from_node_id = f"A{rel['from']}"
-            to_node_id = f"A{rel['to']}"
+        for rel in relationships_data.get("details", []):
+            from_idx = rel.get("from")
+            to_idx = rel.get("to")
+            if from_idx is None or to_idx is None or not (0 <= from_idx < len(abstractions) and 0 <= to_idx < len(abstractions)):
+                continue
+            from_node_id = f"A{from_idx}"
+            to_node_id = f"A{to_idx}"
             # Use potentially translated label, sanitize
             edge_label = (
-                rel["label"].replace('"', "").replace("\n", " ")
+                str(rel.get("label", "Interacts with")).replace('"', "").replace("\n", " ")
             )  # Basic sanitization
             max_label_len = 30
             if len(edge_label) > max_label_len:
