@@ -676,7 +676,7 @@ class WriteChapters(BatchNode):
             tone_note = f" (appropriate for {lang_cap} readers)"
 
         prompt = f"""
-{language_instruction}Write a very beginner-friendly tutorial chapter (in Markdown format) for the project `{project_name}` about the concept: "{abstraction_name}". This is Chapter {chapter_num}.
+{language_instruction}Write a technically precise codebase explanation (in Markdown format) for the project `{project_name}` about the concept: "{abstraction_name}". This is Chapter {chapter_num}.
 
 Concept Details{concept_details_note}:
 - Name: {abstraction_name}
@@ -695,33 +695,35 @@ Relevant Code Snippets (Code itself remains unchanged):
 Instructions for the chapter (Generate content in {language.capitalize()} unless specified otherwise):
 - Start with a clear heading (e.g., `# Chapter {chapter_num}: {abstraction_name}`). Use the provided concept name.
 
-- If this is not the first chapter, begin with a brief transition from the previous chapter{instruction_lang_note}, referencing it with a proper Markdown link using its name{link_lang_note}.
+- If useful, refer to relevant earlier chapters with a proper Markdown link instead of repeating their explanations{link_lang_note}.
 
-- Begin with a high-level motivation explaining what problem this abstraction solves{instruction_lang_note}. Start with a central use case as a concrete example. The whole chapter should guide the reader to understand how to solve this use case. Make it very minimal and friendly to beginners.
+- Briefly state the responsibility and purpose of this abstraction{instruction_lang_note}. Use a concrete project-specific use case when it helps explain its behavior; skip generic introductions.
 
-- If the abstraction is complex, break it down into key concepts. Explain each concept one-by-one in a very beginner-friendly way{instruction_lang_note}.
+- Break down complex or unfamiliar technologies into their relevant concepts{instruction_lang_note}. Assume software engineering experience, not familiarity with every library or framework.
 
-- Explain how to use this abstraction to solve the use case{instruction_lang_note}. Give example inputs and outputs for code snippets (if the output isn't values, describe at a high level what will happen{instruction_lang_note}).
+- Explain how the abstraction is used in this codebase{instruction_lang_note}. Include illustrative inputs and outputs when they clarify the actual implementation.
 
-- Each code block should be BELOW 10 lines! If longer code blocks are needed, break them down into smaller pieces and walk through them one-by-one. Aggresively simplify the code to make it minimal. Use comments{code_comment_note} to skip non-important implementation details. Each code block should have a beginner friendly explanation right after it{instruction_lang_note}.
+- Keep code excerpts focused and accurate. Include enough context to understand important implementation details; explain non-obvious parts without describing every obvious line. Preserve meaningful behavior and use comments{code_comment_note} sparingly.
 
-- Describe the internal implementation to help understand what's under the hood{instruction_lang_note}. First provide a non-code or code-light walkthrough on what happens step-by-step when the abstraction is called{instruction_lang_note}. It's recommended to use a simple sequenceDiagram with a dummy example - keep it minimal with at most 5 participants to ensure clarity. If participant name has space, use: `participant QP as Query Processing`. {mermaid_lang_note}.
+- Describe the relevant internal implementation and call flow{instruction_lang_note}, focusing on code-backed behavior and differences from flows explained in prior chapters. Use a sequence diagram only if the flow is complex and materially different from an earlier diagram. If participant names contain spaces, use aliases such as `participant QP as Query Processing`. {mermaid_lang_note}.
 
-- Then dive deeper into code for the internal implementation with references to files. Provide example code blocks, but make them similarly simple and beginner-friendly. Explain{instruction_lang_note}.
+- Dive deeper where implementation details are important, with concrete file, function, and class references. Explain unfamiliar APIs and framework behavior where needed{instruction_lang_note}.
 
 - IMPORTANT: When you need to refer to other core abstractions covered in other chapters, ALWAYS use proper Markdown links like this: [Chapter Title](filename.md). Use the Complete Tutorial Structure above to find the correct filename and the chapter title{link_lang_note}. Translate the surrounding text.
 
-- Use mermaid diagrams to illustrate complex concepts (```mermaid``` format). {mermaid_lang_note}.
+- Use mermaid diagrams (```mermaid``` format) only when they add understanding beyond existing diagrams. Reuse links to earlier chapters for repeated flows. {mermaid_lang_note}.
 
-- Heavily use analogies and examples throughout{instruction_lang_note} to help beginners understand.
+- Use analogies selectively, only when they materially clarify a difficult concept. Avoid decorative metaphors{instruction_lang_note}.
 
-- End the chapter with a brief conclusion that summarizes what was learned{instruction_lang_note} and provides a transition to the next chapter{instruction_lang_note}. If there is a next chapter, use a proper Markdown link: [Next Chapter Title](next_chapter_filename){link_lang_note}.
+- Do not add routine recaps or transitions. End after the last useful technical detail; include a link to another chapter only when it adds context{link_lang_note}.
 
-- Ensure the tone is welcoming and easy for a newcomer to understand{tone_note}.
+- Use clear, direct language for experienced developers without assuming prior knowledge of the project's technology stack{tone_note}.
+
+- ADAPTIVE EXPLANATION POLICY: Maximize understanding rather than minimizing word count. Review the previous chapters above and avoid re-explaining concepts already covered. Elaborate on previously discussed topics only when this chapter introduces genuinely new details. Explain unfamiliar libraries, frameworks, and architectural patterns in depth when relevant. Reuse existing diagrams by referring to their chapters; draw a new diagram only when it provides materially new information. Prefer code-backed facts, concrete references, and precise implementation differences over generic prose. Avoid filler, redundant summaries, and artificial transitions. Let the length depend on technical complexity and novelty. Before finalizing, remove paragraphs and diagrams that add no new information.
 
 - Output *only* the Markdown content for this chapter.
 
-Now, directly provide a super beginner-friendly Markdown output (DON'T need ```markdown``` tags):
+Now, directly provide a technically precise Markdown output (DON'T need ```markdown``` tags):
 """
         chapter_content = call_llm(prompt, use_cache=(use_cache and self.cur_retry == 0)) # Use cache only if enabled and not retrying
         # Basic validation/cleanup
