@@ -90,6 +90,9 @@ This is a tutorial project of [Pocket Flow](https://github.com/The-Pocket/Pocket
    ```
 
 4. Set up LLM in [`utils/call_llm.py`](./utils/call_llm.py) by providing credentials. To do so, you can put the values in a `.env` file. By default, you can use the AI Studio key with this client for Gemini Pro 2.5 by setting the `GEMINI_API_KEY` environment variable. If you want to use another LLM, you can set the `LLM_PROVIDER` environment variable (e.g. `XAI`), and then set the model, url, and API key (e.g. `XAI_MODEL`, `XAI_URL`,`XAI_API_KEY`). If using Ollama, the url is `http://localhost:11434/` and the API key can be omitted.
+
+   If you have no API endpoint but the [GitHub Copilot CLI](https://docs.github.com/copilot/how-tos/copilot-cli), set `LLM_PROVIDER` to `COPILOT_CLI`. Run `copilot login` once; no API key is needed. Each prompt is sent to a local `copilot` process through stdin, so its size is limited only by the context window of the model. Optional settings are `COPILOT_CLI_MODEL` (default `claude-sonnet-5.5` with the `long_context` window), `COPILOT_CLI_CONTEXT` (`default` or `long_context`), `COPILOT_CLI_REASONING_EFFORT`, `COPILOT_CLI_TIMEOUT` (seconds per call, default 1200) and `COPILOT_CLI_PATH`. `GITHUB_TOKEN` is not passed on to Copilot; use `COPILOT_GITHUB_TOKEN` if you want to authenticate with a token. Every call consumes AI credits and is stored as a session by the CLI. On Windows you can use `start-copilot.bat <directory>`.
+
    You can use your own models. We highly recommend the latest models with thinking capabilities (Claude 3.7 with thinking, O1). You can verify that it is correctly set up by running:
    ```bash
    python utils/call_llm.py

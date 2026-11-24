@@ -9,7 +9,7 @@ dotenv.load_dotenv()
 # Default file patterns
 DEFAULT_INCLUDE_PATTERNS = {
     "*.py", "*.js", "*.jsx", "*.ts", "*.tsx", "*.go", "*.java", "*.pyi", "*.pyx",
-    "*.c", "*.cc", "*.cpp", "*.h", "*.md", "*.rst", "*Dockerfile",
+    "*.c", "*.cc", "*.cpp", "*.h", "*.cs", "*.md", "*.rst", "*Dockerfile",
     "*Makefile", "*.yaml", "*.yml",
 }
 
