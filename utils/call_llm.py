@@ -101,7 +101,7 @@ def _call_llm_provider(prompt: str) -> str:
     }
 
     try:
-        response = requests.post(url, headers=headers, json=payload)
+        response = requests.post(url, headers=headers, json=payload, timeout=(10, 300))
         response_json = response.json() # Log the response
         logger.info("RESPONSE:\n%s", json.dumps(response_json, indent=2))
         #logger.info(f"RESPONSE: {response.json()}")
@@ -115,10 +115,10 @@ def _call_llm_provider(prompt: str) -> str:
         except:
             pass
         raise Exception(error_message)
-    except requests.exceptions.ConnectionError:
-        raise Exception(f"Failed to connect to {provider} API. Check your network connection.")
     except requests.exceptions.Timeout:
         raise Exception(f"Request to {provider} API timed out.")
+    except requests.exceptions.ConnectionError:
+        raise Exception(f"Failed to connect to {provider} API. Check your network connection.")
     except requests.exceptions.RequestException as e:
         raise Exception(f"An error occurred while making the request to {provider}: {e}")
     except ValueError:
